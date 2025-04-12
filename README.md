@@ -1,17 +1,17 @@
-# Team Formation Bot 🤖
+# Index Bot 
 
-A Discord bot designed to intelligently form balanced teams for hackathons and competitions based on participants' skills, experience, and preferences.
+A Discord bot designed to form balanced teams for hackathons and competitions based on participants' skills, experience, and preferences.
 
-## Features ✨
+## Features 
 
-- **Smart Team Formation**: Uses a sophisticated algorithm to create balanced teams based on multiple factors
+- **Smart Team Formation**: Uses a simmulated annealing algorithm to create balanced teams based on multiple factors
 - **Participant Profiles**: Allows users to create detailed profiles with their skills and experience
 - **Competition Management**: Create and manage different competitions with specific role requirements
 - **Role-Based Team Building**: Ensures teams have the required roles and skills
 - **Leader Assignment**: Automatically identifies potential team leaders
 - **Private Team Channels**: Creates dedicated Discord channels for each team
 
-## Installation 🛠️
+## Installation 🛠
 
 1. Clone the repository:
 ```bash
@@ -35,7 +35,7 @@ pip install -r requirements.txt
 DISCORD_TOKEN=your_discord_token_here
 ```
 
-## Usage 📝
+## Usage 
 
 1. Start the bot:
 ```bash
@@ -49,9 +49,9 @@ python bot.py
 - `!list-participants <name>` - List participants in a competition
 - `!make-teams <comp_name> <team_size>` - Form teams for a competition
 
-## How It Works 🔍
+## How It Works 
 
-The bot uses a sophisticated algorithm that considers:
+The bot uses an algorithm that considers:
 - Hackathon scores
 - Project experience
 - GitHub contributions
@@ -63,15 +63,15 @@ The bot uses a sophisticated algorithm that considers:
 
 Teams are formed using a simulated annealing algorithm to ensure optimal balance and role distribution.
 
-## Contributing 🤝
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## License 📄
+## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Acknowledgments 🙏
+## Acknowledgments 
 
 - Discord.py for the bot framework
 - NumPy for mathematical operations

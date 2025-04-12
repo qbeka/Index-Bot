@@ -41,7 +41,6 @@ class Participant:
     def __repr__(self):
         return f"{self.name} ({self.role}, Composite: {self.composite_score:.2f})"
 
-
 class CompositeScoreCalculator:
     def __init__(self, participants, weights=None, exponent=3):
         # Default weights (should sum to 1.0)
@@ -128,7 +127,6 @@ def optimize_teams_sa_anim(teams, role_requirements, leader_required, full_team_
 
     while T > 1e-4 and iteration < max_iter:
         iteration += 1
-        # Choose two random teams to swap members.
         i, j = random.sample(range(len(current_teams)), 2)
         team1 = current_teams[i]
         team2 = current_teams[j]
@@ -205,13 +203,18 @@ intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
+bot.remove_command("help")  # Remove the default help command
 
-@bot.event
-async def on_ready():
-    print(f"Bot connected as {bot.user}")
+# Create a command group "index" so all commands are invoked like "!index <subcommand>"
+@bot.group(name="index", invoke_without_command=True)
+async def index(ctx):
+    await ctx.send("Please use `!index help` for a list of available commands.")
 
-# Command: !create-profile
-@bot.command(name="create-profile")
+# -------------------------------
+# Profile Commands as Subcommands
+# -------------------------------
+
+@index.command(name="create-profile")
 async def create_profile(ctx):
     user_id = str(ctx.author.id)
     profiles = load_profiles()
@@ -222,7 +225,6 @@ async def create_profile(ctx):
     def check(m):
         return m.author == ctx.author and m.channel == ctx.channel
 
-    # Main questions for metrics used in the algorithm:
     questions = [
         ("Enter your name:", "name"),
         ("Enter your skill areas (comma separated):", "skill_areas"),
@@ -236,7 +238,6 @@ async def create_profile(ctx):
         ("Enter your availability (optional):", "availability"),
         ("Do you want to be team lead? (yes/no):", "wants_to_lead")
     ]
-    # Additional info fields not used for team metrics:
     additional_questions = [
         ("Enter your LinkedIn URL (e.g., https://www.linkedin.com/in/qendrimbeka/):", "linkedin"),
         ("Enter your GitHub URL (e.g., https://github.com/qendrimbeka/):", "github"),
@@ -262,13 +263,12 @@ async def create_profile(ctx):
     save_profiles(profiles)
     await ctx.send("Profile created successfully.")
 
-# Command: !update-profile <metric>
-@bot.command(name="update-profile")
+@index.command(name="update-profile")
 async def update_profile(ctx, metric: str):
     user_id = str(ctx.author.id)
     profiles = load_profiles()
     if user_id not in profiles:
-        await ctx.send("Profile not found. Please create one using !create-profile.")
+        await ctx.send("Profile not found. Please create one using !index create-profile.")
         return
     valid_metrics = ["name", "skill_areas", "role", "experience_level", "hackathon_score",
                      "projects_completed", "github_contributions", "problem_solving", "innovation_index",
@@ -284,18 +284,15 @@ async def update_profile(ctx, metric: str):
         await ctx.send("Update timed out.")
         return
     new_value = msg.content.strip()
-    # For skill_areas if updating, split by commas
     if metric == "skill_areas":
         new_value = [s.strip() for s in new_value.split(",")]
-    # For wants_to_lead, convert to boolean
     if metric == "wants_to_lead":
         new_value = new_value.lower() in ["yes", "y", "true", "1"]
     profiles[user_id][metric] = new_value
     save_profiles(profiles)
     await ctx.send(f"Profile updated: {metric} is now '{new_value}'.")
 
-# Command: !remove-profile
-@bot.command(name="remove-profile")
+@index.command(name="remove-profile")
 async def remove_profile(ctx):
     user_id = str(ctx.author.id)
     profiles = load_profiles()
@@ -306,13 +303,12 @@ async def remove_profile(ctx):
     save_profiles(profiles)
     await ctx.send("Your profile has been removed.")
 
-# Command: !profile - View your profile
-@bot.command(name="profile")
+@index.command(name="profile")
 async def view_profile(ctx):
     user_id = str(ctx.author.id)
     profiles = load_profiles()
     if user_id not in profiles:
-        await ctx.send("Profile not found. Please create one using !create-profile.")
+        await ctx.send("Profile not found. Please create one using !index create-profile.")
         return
     profile_data = profiles[user_id]
     embed = discord.Embed(title="Your Profile", color=discord.Color.green())
@@ -322,18 +318,16 @@ async def view_profile(ctx):
         embed.add_field(name=key.capitalize(), value=value, inline=False)
     await ctx.send(embed=embed)
 
-# Command: !stats - Show competitions you have joined
-@bot.command(name="stats")
+@index.command(name="stats")
 async def stats(ctx):
     user_id = str(ctx.author.id)
     competitions = []
-    # Scan current directory for .json files that might be competition files
+    # Scan current directory for .json files (excluding profiles.json)
     for filename in os.listdir("."):
         if filename.endswith(".json") and filename != "profiles.json":
             try:
                 with open(filename, "r") as f:
                     data = json.load(f)
-                # Check if this file is a competition file (has participants and type)
                 if "participants" in data and isinstance(data["participants"], list):
                     if user_id in data["participants"]:
                         comp_name = data.get("name", filename)
@@ -346,8 +340,11 @@ async def stats(ctx):
     else:
         await ctx.send("You are not in any competitions yet.")
 
-# Command: !add-comp <competition> (Admin only)
-@bot.command(name="add-comp")
+# -------------------------------
+# Competition & Team Commands
+# -------------------------------
+
+@index.command(name="add-comp")
 @commands.has_permissions(administrator=True)
 async def add_comp(ctx, comp_name: str):
     if load_competition(comp_name):
@@ -400,24 +397,21 @@ async def add_comp(ctx, comp_name: str):
     save_competition(comp_data)
     await ctx.send(f"Competition {comp_name} ({comp_type}) created with role requirements: {role_requirements} and leader_required = {leader_required}")
 
-    # Create a new category with the competition name
     comp_category = discord.utils.get(ctx.guild.categories, name=comp_name)
     if comp_category is None:
         comp_category = await ctx.guild.create_category(comp_name)
-    # Create the two default channels: Competition Info and Help.
     try:
         await ctx.guild.create_text_channel("competition-info", category=comp_category)
         await ctx.guild.create_text_channel("help", category=comp_category)
     except Exception as e:
         await ctx.send(f"Error creating default channels: {e}")
 
-# Command: !join-comp <competition>
-@bot.command(name="join-comp")
+@index.command(name="join-comp")
 async def join_comp(ctx, comp_name: str):
     user_id = str(ctx.author.id)
     profiles = load_profiles()
     if user_id not in profiles:
-        await ctx.send("You need to create a profile using !create-profile first.")
+        await ctx.send("You need to create a profile using !index create-profile first.")
         return
     comp_data = load_competition(comp_name)
     if not comp_data:
@@ -430,8 +424,7 @@ async def join_comp(ctx, comp_name: str):
     save_competition(comp_data)
     await ctx.send(f"You have joined {comp_name}.")
 
-# Command: !list-participants <competition>
-@bot.command(name="list-participants")
+@index.command(name="list-participants")
 async def list_participants(ctx, comp_name: str):
     comp_data = load_competition(comp_name)
     if not comp_data or not comp_data["participants"]:
@@ -445,8 +438,7 @@ async def list_participants(ctx, comp_name: str):
         message += f"- {name}\n"
     await ctx.send(message)
 
-# Command: !make-teams <competition> <team_size>
-@bot.command(name="make-teams")
+@index.command(name="make-teams")
 async def make_teams(ctx, comp_name: str, team_size: int):
     comp_data = load_competition(comp_name)
     if not comp_data:
@@ -518,7 +510,6 @@ async def make_teams(ctx, comp_name: str, team_size: int):
             message += f"→ Team Lead: {leader_text}\n"
     await ctx.send(message)
 
-    # Auto-create private team channels inside the competition category.
     if ctx.guild.me.guild_permissions.manage_channels:
         comp_category = discord.utils.get(ctx.guild.categories, name=comp_name)
         if comp_category is None:
@@ -542,34 +533,30 @@ async def make_teams(ctx, comp_name: str, team_size: int):
                 print(f"Failed to create channel {channel_name}: {e}")
 
 # =================================
-# Help Command: !help
+# Help Command: !index help
 # =================================
 
-@bot.command(name="help")
+@index.command(name="help")
 async def help_command(ctx):
-    embed = discord.Embed(title="HackBot Commands", description="List of available commands", color=discord.Color.blue())
-    embed.add_field(name="!create-profile", 
-                    value=("Create a new profile. "
-                           "Includes fields for metrics and additional info (LinkedIn, GitHub, email, year of study, school & program)."),
-                    inline=False)
-    embed.add_field(name="!update-profile <metric>", 
-                    value="Update a specific field in your profile. Example: `!update-profile email`.", inline=False)
-    embed.add_field(name="!remove-profile", 
+    embed = discord.Embed(title="HackBot Commands", description="List of available commands (use `!index <command>`) ", color=discord.Color.blue())
+    embed.add_field(name="create-profile", 
+                    value=("Create a new profile. Includes fields for metrics and additional info (LinkedIn URL, GitHub URL, email, year of study, school & program)."), inline=False)
+    embed.add_field(name="update-profile <metric>", 
+                    value="Update a specific field in your profile. Example: `!index update-profile email`", inline=False)
+    embed.add_field(name="remove-profile", 
                     value="Delete your profile.", inline=False)
-    embed.add_field(name="!profile", 
+    embed.add_field(name="profile", 
                     value="View your current profile information.", inline=False)
-    embed.add_field(name="!join-comp <competition>", 
+    embed.add_field(name="stats", 
+                    value="View the competitions you are in.", inline=False)
+    embed.add_field(name="join-comp <competition>", 
                     value="Join an existing competition.", inline=False)
-    embed.add_field(name="!list-participants <competition>", 
+    embed.add_field(name="list-participants <competition>", 
                     value="List all participants in a competition.", inline=False)
-    embed.add_field(name="!make-teams <competition> <team_size>", 
-                    value=("Form teams for a competition based on profiles and required roles. "
-                           "Also auto-creates team channels within the competition category."), inline=False)
-    embed.add_field(name="!add-comp <competition>", 
-                    value=("**Admin Only:** Create a new competition with specific role requirements. "
-                           "Also creates a new category with `competition-info` and `help` channels."), inline=False)
-    embed.add_field(name="!stats", 
-                    value=("View a summary of how many competitions you are in and their names."), inline=False)
+    embed.add_field(name="make-teams <competition> <team_size>", 
+                    value=("Form teams for a competition based on profiles and required roles, and auto-create team channels within the competition category."), inline=False)
+    embed.add_field(name="add-comp <competition>", 
+                    value=("**Admin Only:** Create a new competition with specific role requirements. Also creates a new category with `competition-info` and `help` channels."), inline=False)
     await ctx.send(embed=embed)
 
 # =================================
