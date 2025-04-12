@@ -554,9 +554,9 @@ async def help_command(ctx):
     embed.add_field(name="list-participants <competition>", 
                     value="List all participants in a competition.", inline=False)
     embed.add_field(name="make-teams <competition> <team_size>", 
-                    value=("Form teams for a competition based on profiles and required roles, and auto-create team channels within the competition category."), inline=False)
+                    value=("Admin Only: Form teams for a competition based on profiles and required roles, and auto-create team channels within the competition category."), inline=False)
     embed.add_field(name="add-comp <competition>", 
-                    value=("**Admin Only:** Create a new competition with specific role requirements. Also creates a new category with `competition-info` and `help` channels."), inline=False)
+                    value=("Admin Only: Create a new competition with specific role requirements. Also creates a new category with `competition-info` and `help` channels."), inline=False)
     await ctx.send(embed=embed)
 
 # =================================
