@@ -9,7 +9,7 @@ import copy
 from discord.ext import commands
 from dotenv import load_dotenv
 
-# Load environment variables (ensure DISCORD_TOKEN is set)
+# Load environment variables (ensure DISCORD_TOKEN is set in your .env)
 load_dotenv()
 
 # =================================
@@ -40,6 +40,7 @@ class Participant:
 
     def __repr__(self):
         return f"{self.name} ({self.role}, Composite: {self.composite_score:.2f})"
+
 
 class CompositeScoreCalculator:
     def __init__(self, participants, weights=None, exponent=3):
@@ -97,7 +98,7 @@ def initialize_teams(participants, team_size):
 def overall_team_avg_variance(teams):
     team_avgs = []
     for team in teams:
-        if len(team) > 0:
+        if team:
             team_avgs.append(np.mean([p.composite_score for p in team]))
     return np.var(team_avgs)
 
@@ -128,12 +129,10 @@ def optimize_teams_sa_anim(teams, role_requirements, leader_required, full_team_
     while T > 1e-4 and iteration < max_iter:
         iteration += 1
         i, j = random.sample(range(len(current_teams)), 2)
-        team1 = current_teams[i]
-        team2 = current_teams[j]
-        if len(team1) == 0 or len(team2) == 0:
+        team1, team2 = current_teams[i], current_teams[j]
+        if not team1 or not team2:
             continue
-        idx1 = random.randrange(len(team1))
-        idx2 = random.randrange(len(team2))
+        idx1, idx2 = random.randrange(len(team1)), random.randrange(len(team2))
         new_team1 = team1.copy()
         new_team2 = team2.copy()
         new_team1[idx1], new_team2[idx2] = new_team2[idx2], new_team1[idx1]
@@ -143,8 +142,7 @@ def optimize_teams_sa_anim(teams, role_requirements, leader_required, full_team_
             yield (copy.deepcopy(current_teams), current_obj, iteration, None, None, None, None, False)
             continue
         new_teams = current_teams.copy()
-        new_teams[i] = new_team1
-        new_teams[j] = new_team2
+        new_teams[i], new_teams[j] = new_team1, new_team2
         new_obj = overall_team_avg_variance(new_teams)
         delta = new_obj - current_obj
         if delta < 0 or random.random() < math.exp(-delta / T):
@@ -195,7 +193,7 @@ def save_competition(comp_data):
         json.dump(comp_data, f, indent=4)
 
 # =================================
-# Discord Bot Setup & Commands
+# Discord Bot Setup & Command Group "index"
 # =================================
 
 intents = discord.Intents.default()
@@ -203,15 +201,15 @@ intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-bot.remove_command("help")  # Remove the default help command
+bot.remove_command("help")  # Remove default help
 
-# Create a command group "index" so all commands are invoked like "!index <subcommand>"
+# Create a command group "index"
 @bot.group(name="index", invoke_without_command=True)
 async def index(ctx):
     await ctx.send("Please use `!index help` for a list of available commands.")
 
 # -------------------------------
-# Profile Commands as Subcommands
+# Profile Subcommands under index
 # -------------------------------
 
 @index.command(name="create-profile")
@@ -341,7 +339,7 @@ async def stats(ctx):
         await ctx.send("You are not in any competitions yet.")
 
 # -------------------------------
-# Competition & Team Commands
+# Competition & Team Subcommands under index
 # -------------------------------
 
 @index.command(name="add-comp")
@@ -532,21 +530,85 @@ async def make_teams(ctx, comp_name: str, team_size: int):
             except Exception as e:
                 print(f"Failed to create channel {channel_name}: {e}")
 
-# =================================
-# Help Command: !index help
-# =================================
+# -------------------------------
+# Event Listeners for Role Assignment
+# -------------------------------
+
+@bot.event
+async def on_member_join(member):
+    # Automatically assign the "Recruit" role to new members.
+    recruit_role = discord.utils.get(member.guild.roles, name="Recruit")
+    if recruit_role:
+        try:
+            await member.add_roles(recruit_role)
+            print(f"Assigned Recruit role to {member}")
+        except Exception as e:
+            print(f"Error assigning Recruit role to {member}: {e}")
+    else:
+        print("Recruit role not found in guild.")
+
+@bot.event
+async def on_raw_reaction_add(payload):
+    # When a reaction is added to a target message by a recruit, assign the "Introductions" role.
+    TARGET_GUILD_ID = 1355256538494926879
+    TARGET_CHANNEL_ID = 1355264051038388314
+    TARGET_MESSAGE_ID = 1359236978930876576
+    if payload.guild_id != TARGET_GUILD_ID:
+        return
+    if payload.channel_id != TARGET_CHANNEL_ID:
+        return
+    if payload.message_id != TARGET_MESSAGE_ID:
+        return
+    if str(payload.emoji) == "👍":
+        guild = bot.get_guild(payload.guild_id)
+        if not guild:
+            return
+        member = guild.get_member(payload.user_id)
+        if not member:
+            return
+        introductions_role = discord.utils.get(guild.roles, name="Introductions")
+        if introductions_role:
+            try:
+                await member.add_roles(introductions_role)
+                try:
+                    await member.send("You have been granted access to #introductions. Please introduce yourself there!")
+                except discord.Forbidden:
+                    pass
+            except Exception as e:
+                print(f"Error assigning Introductions role to {member}: {e}")
+
+@bot.event
+async def on_message(message):
+    # If a user sends a message in the "introductions" channel, assign them the "Member" role.
+    if message.author.bot:
+        return
+    if message.channel.name.lower() == "introductions":
+        member = message.author
+        guild = message.guild
+        member_role = discord.utils.get(guild.roles, name="Member")
+        if member_role and member_role not in member.roles:
+            try:
+                await member.add_roles(member_role)
+                await message.channel.send(f"Welcome {member.mention}, you are now a Member!")
+            except Exception as e:
+                print(f"Error assigning Member role to {member}: {e}")
+    await bot.process_commands(message)
+
+# -------------------------------
+# Help Subcommand: !index help
+# -------------------------------
 
 @index.command(name="help")
 async def help_command(ctx):
-    embed = discord.Embed(title="HackBot Commands", description="List of available commands (use `!index <command>`) ", color=discord.Color.blue())
+    embed = discord.Embed(title="HackBot Commands", description="Use `!index <command>` for each command", color=discord.Color.blue())
     embed.add_field(name="create-profile", 
-                    value=("Create a new profile. Includes fields for metrics and additional info (LinkedIn URL, GitHub URL, email, year of study, school & program)."), inline=False)
+                    value="Create a new profile (includes metrics and extra info such as LinkedIn, GitHub, email, year of study, school & program).", inline=False)
     embed.add_field(name="update-profile <metric>", 
-                    value="Update a specific field in your profile. Example: `!index update-profile email`", inline=False)
+                    value="Update a specific profile field. Example: `!index update-profile email`.", inline=False)
     embed.add_field(name="remove-profile", 
-                    value="Delete your profile.", inline=False)
+                    value="Remove your profile.", inline=False)
     embed.add_field(name="profile", 
-                    value="View your current profile information.", inline=False)
+                    value="View your current profile.", inline=False)
     embed.add_field(name="stats", 
                     value="View the competitions you are in.", inline=False)
     embed.add_field(name="join-comp <competition>", 
@@ -554,9 +616,9 @@ async def help_command(ctx):
     embed.add_field(name="list-participants <competition>", 
                     value="List all participants in a competition.", inline=False)
     embed.add_field(name="make-teams <competition> <team_size>", 
-                    value=("Admin Only: Form teams for a competition based on profiles and required roles, and auto-create team channels within the competition category."), inline=False)
+                    value="Form teams for a competition and auto-create team channels.", inline=False)
     embed.add_field(name="add-comp <competition>", 
-                    value=("Admin Only: Create a new competition with specific role requirements. Also creates a new category with `competition-info` and `help` channels."), inline=False)
+                    value="**Admin Only:** Create a new competition (also creates a new category with 'competition-info' and 'help' channels).", inline=False)
     await ctx.send(embed=embed)
 
 # =================================
