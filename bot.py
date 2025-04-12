@@ -197,7 +197,7 @@ intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-bot.remove_command("help")  # Remove default help command
+bot.remove_command("help")  # Remove default help
 
 # Create a command group "index"
 @bot.group(name="index", invoke_without_command=True)
@@ -542,55 +542,18 @@ async def on_member_join(member):
         print("Recruit role not found. Please create it in your server.")
 
 @bot.event
-async def on_raw_reaction_add(payload):
-    # Ensure this only runs for guild messages
-    if payload.guild_id is None:
-        return
-
-    TARGET_GUILD_ID = 1355256538494926879
-    TARGET_CHANNEL_ID = 1355264051038388314
-    TARGET_MESSAGE_ID = 1359236978930876576
-
-    if payload.guild_id != TARGET_GUILD_ID:
-        return
-    if payload.channel_id != TARGET_CHANNEL_ID:
-        return
-    if payload.message_id != TARGET_MESSAGE_ID:
-        return
-    if str(payload.emoji) == "👍":
-        guild = bot.get_guild(payload.guild_id)
-        if not guild:
-            return
-        member = guild.get_member(payload.user_id)
-        if not member:
-            return
-        introductions_role = discord.utils.get(guild.roles, name="Introductions")
-        if introductions_role:
-            try:
-                await member.add_roles(introductions_role)
-                try:
-                    await member.send("You have been granted access to #introductions. Please introduce yourself there!")
-                except discord.Forbidden:
-                    pass
-            except Exception as e:
-                print(f"Error assigning Introductions role to {member}: {e}")
-
-@bot.event
 async def on_message(message):
-    # Skip DMs so we avoid errors when accessing attributes like message.channel.name.
-    if not message.guild:
-        return
-
-    # If a user sends a message in "introductions", assign the "Member" role.
-    if not message.author.bot and message.channel.name.lower() == "introductions":
-        member = message.author
-        member_role = discord.utils.get(message.guild.roles, name="Member")
-        if member_role and member_role not in member.roles:
-            try:
-                await member.add_roles(member_role)
-                await message.channel.send(f"Welcome {member.mention}, you are now a Member!")
-            except Exception as e:
-                print(f"Error assigning Member role to {member}: {e}")
+    # Process introductions if message is sent in a guild
+    if message.guild and message.channel.name.lower() == "introductions":
+        if not message.author.bot:
+            member = message.author
+            member_role = discord.utils.get(message.guild.roles, name="Member")
+            if member_role and member_role not in member.roles:
+                try:
+                    await member.add_roles(member_role)
+                    await message.channel.send(f"Welcome {member.mention}, you are now a Member!")
+                except Exception as e:
+                    print(f"Error assigning Member role to {member}: {e}")
     await bot.process_commands(message)
 
 # -------------------------------
